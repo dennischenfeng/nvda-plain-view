@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude
+CLAUDE.md
+
+# NVDA add-on build artifacts
+*.nvda-addon
+addon/manifest.ini
+addon/manifest-translated.ini
+addon/doc/*/readme.html
+.sconsign.dblite
+.sconf_temp/
+config.log
