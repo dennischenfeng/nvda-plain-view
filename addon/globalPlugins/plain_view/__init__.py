@@ -8,7 +8,6 @@
 # See COPYING.txt at the root of this project for the full license text.
 
 import ctypes
-import ctypes.wintypes as wt
 import os
 import re
 import subprocess
@@ -22,6 +21,7 @@ import globalPluginHandler
 import speech
 import textInfos
 import ui
+import winUser
 from logHandler import log
 from scriptHandler import script
 
@@ -35,14 +35,13 @@ except Exception:
 TEMP_FILENAME = "plainview.txt"
 TEMP_PATH = os.path.join(tempfile.gettempdir(), TEMP_FILENAME)
 
-_user32 = ctypes.windll.user32
-_EnumWindowsProc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
 _SW_MAXIMIZE = 3
 _GA_ROOT = 2
 
 # Claude Code attention-point patterns, ported from the VS Code prototype.
 _CC_ITEM_LINE_RE = re.compile(r"^[∴●>❯!].*\S")
-_CC_HRULE_RE = re.compile(r"───")
+_CC_HRULE = "───"
+_CC_PROMPT_SCAN_LINES = 10
 
 
 def _grab_focused_text() -> str:
@@ -67,51 +66,42 @@ def _grab_focused_text() -> str:
 
 
 def _find_notepad_hwnd(needle: str, timeout_s: float = 1.5) -> int | None:
-	"""Poll EnumWindows for a visible top-level window whose title contains
-	`needle` and ends with " - Notepad". Works for both classic Notepad
-	(new process per launch) and Win11 tabbed Notepad (new tab in singleton).
+	"""Find a visible top-level window whose title contains `needle` and ends
+	with " - Notepad". Polls until the window appears or `timeout_s` elapses.
+	Works for both classic Notepad (new process per launch) and Win11 tabbed
+	Notepad (new tab in singleton).
 	"""
+	def predicate(hwnd: int) -> bool:
+		if not winUser.isWindowVisible(hwnd):
+			return False
+		title = winUser.getWindowText(hwnd)
+		return needle in title and title.endswith(" - Notepad")
+
 	deadline = time.monotonic() + timeout_s
 	while time.monotonic() < deadline:
-		found: list[int] = []
-
-		def cb(hwnd, _lparam):
-			if not _user32.IsWindowVisible(hwnd):
-				return True
-			length = _user32.GetWindowTextLengthW(hwnd)
-			if length == 0:
-				return True
-			buf = ctypes.create_unicode_buffer(length + 1)
-			_user32.GetWindowTextW(hwnd, buf, length + 1)
-			title = buf.value
-			if needle in title and title.endswith(" - Notepad"):
-				found.append(hwnd)
-				return False
-			return True
-
-		_user32.EnumWindows(_EnumWindowsProc(cb), 0)
-		if found:
-			return found[0]
+		hwnd = winUser.findTopLevelWindow(predicate)
+		if hwnd:
+			return hwnd
 		time.sleep(0.05)
 	return None
 
 
 def _foreground_window(hwnd: int) -> None:
-	_user32.ShowWindow(hwnd, _SW_MAXIMIZE)
-	_user32.SetForegroundWindow(hwnd)
+	ctypes.windll.user32.ShowWindow(hwnd, _SW_MAXIMIZE)
+	winUser.setForegroundWindow(hwnd)
 
 
 def _is_claude_code_awaiting_regular_prompt(lines: list[str]) -> bool:
-	"""True if the bottom ~10 lines contain Claude Code's prompt-input box:
+	"""True if the bottom lines contain Claude Code's prompt-input box:
 	three consecutive lines starting with ───, ❯, and ─── respectively.
 	"""
 	total = len(lines)
-	start = max(0, total - 10)
+	start = max(0, total - _CC_PROMPT_SCAN_LINES)
 	for i in range(start, total - 2):
 		if (
-			lines[i].startswith("───")
+			lines[i].startswith(_CC_HRULE)
 			and lines[i + 1].startswith("❯")
-			and lines[i + 2].startswith("───")
+			and lines[i + 2].startswith(_CC_HRULE)
 		):
 			return True
 	return False
@@ -122,46 +112,50 @@ def _find_claude_code_attention_line(text: str) -> int | None:
 	or None if no attention point can be identified.
 
 	- If Claude Code appears to be awaiting a regular text prompt: the last line
-	  ending in one of ∴ ● > ❯ !  (a Claude Code item line).
+	  starting with one of ∴ ● > ❯ !  (a Claude Code item line).
 	- Otherwise: the last line containing ───.
 	"""
 	lines = text.splitlines()
 	if not lines:
 		return None
-	if _is_claude_code_awaiting_regular_prompt(lines):
-		pattern = _CC_ITEM_LINE_RE
-	else:
-		pattern = _CC_HRULE_RE
+	awaiting_prompt = _is_claude_code_awaiting_regular_prompt(lines)
 	for idx in range(len(lines) - 1, -1, -1):
-		if pattern.search(lines[idx]):
+		line = lines[idx]
+		matched = _CC_ITEM_LINE_RE.search(line) if awaiting_prompt else _CC_HRULE in line
+		if matched:
 			return idx + 1
 	return None
 
 
-def _move_notepad_caret_to_line(notepad_hwnd: int, line: int, attempts: int = 40, interval_ms: int = 40) -> None:
+def _move_notepad_caret_to_line(notepad_hwnd: int, line: int, timeout_s: float = 1.6) -> None:
 	"""Asynchronously poll for NVDA focus to settle inside the given Notepad
-	window, then move the caret to the 1-based `line`. Returns immediately;
-	the actual move happens later on NVDA's wx event loop via core.callLater.
-	Total budget ≈ attempts * interval_ms ms.
+	window, then move the caret to the 1-based `line` and speak it. Returns
+	immediately; the actual move happens later on NVDA's wx event loop via
+	core.callLater.
 	"""
 	log.debug("PlainView: scheduling caret move; notepad_hwnd=%s target_line=%s", notepad_hwnd, line)
+	interval_ms = 40
+	attempts = max(1, int((timeout_s * 1000) / interval_ms))
 
 	def _try(remaining: int) -> None:
 		candidate = api.getFocusObject()
 		candidate_hwnd = getattr(candidate, "windowHandle", None) or 0
-		root = _user32.GetAncestor(candidate_hwnd, _GA_ROOT) if candidate_hwnd else 0
+		root = winUser.getAncestor(candidate_hwnd, _GA_ROOT) if candidate_hwnd else 0
 		is_descendant = candidate_hwnd and root == notepad_hwnd and candidate_hwnd != notepad_hwnd
 		if is_descendant:
 			try:
 				ti = candidate.makeTextInfo(textInfos.POSITION_FIRST)
-				if line > 1:
-					ti.move(textInfos.UNIT_PARAGRAPH, line - 1)
-				ti.updateCaret()
-				lineInfo = candidate.makeTextInfo(textInfos.POSITION_CARET)
-				lineInfo.expand(textInfos.UNIT_LINE)
-				speech.cancelSpeech()
-				speech.speakTextInfo(lineInfo, reason=controlTypes.OutputReason.CARET)
-				return
+				want = line - 1
+				moved = ti.move(textInfos.UNIT_PARAGRAPH, want) if want > 0 else 0
+				if moved == want:
+					ti.updateCaret()
+					lineInfo = candidate.makeTextInfo(textInfos.POSITION_CARET)
+					lineInfo.expand(textInfos.UNIT_LINE)
+					speech.cancelSpeech()
+					speech.speakTextInfo(lineInfo, reason=controlTypes.OutputReason.CARET)
+					return
+				# Short move means the document isn't fully loaded yet; keep polling.
+				log.debug("PlainView: short paragraph move (%s of %s); continuing to poll", moved, want)
 			except NotImplementedError:
 				log.debug("PlainView: focus object not editable yet; continuing to poll")
 			except Exception:
@@ -187,19 +181,19 @@ def _open_plain_view() -> tuple[int, str] | None:
 			f.write(text)
 	except OSError:
 		log.error("PlainView: failed to write temp file %s", TEMP_PATH, exc_info=True)
-		ui.message("Plain View: could not write temp file")
+		ui.message(_("Plain View: could not write temp file"))
 		return None
 
 	try:
 		subprocess.Popen(["notepad.exe", TEMP_PATH], close_fds=True)
 	except OSError:
 		log.error("PlainView: failed to launch Notepad", exc_info=True)
-		ui.message("Plain View: could not launch Notepad")
+		ui.message(_("Plain View: could not launch Notepad"))
 		return None
 
 	hwnd = _find_notepad_hwnd(TEMP_FILENAME)
 	if hwnd is None:
-		ui.message("Plain View: could not locate Notepad window")
+		ui.message(_("Plain View: could not locate Notepad window"))
 		return None
 
 	_foreground_window(hwnd)
@@ -229,6 +223,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		hwnd, text = result
 		target_line = _find_claude_code_attention_line(text)
 		if target_line is None:
-			ui.message("No Claude Code attention point found")
+			ui.message(_("No Claude Code attention point found"))
 			return
 		_move_notepad_caret_to_line(hwnd, target_line)
