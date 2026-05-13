@@ -225,6 +225,7 @@ CLAUDE.md
 addon/manifest.ini
 addon/manifest-translated.ini
 addon/doc/*/readme.html
+addon/doc/*/readme.md
 .sconsign.dblite
 .sconf_temp/
 config.log

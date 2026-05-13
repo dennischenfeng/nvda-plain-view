@@ -77,6 +77,9 @@ def _find_notepad_hwnd(needle: str, timeout_s: float = 1.5) -> int | None:
 		title = winUser.getWindowText(hwnd)
 		return needle in title and title.endswith(" - Notepad")
 
+	# Synchronous poll: blocks NVDA's main thread for up to timeout_s. Accepted
+	# because EnumWindows doesn't depend on NVDA's event loop; switching to
+	# core.callLater here would force _open_plain_view to become async too.
 	deadline = time.monotonic() + timeout_s
 	while time.monotonic() < deadline:
 		hwnd = winUser.findTopLevelWindow(predicate)
@@ -141,6 +144,10 @@ def _move_notepad_caret_to_line(notepad_hwnd: int, line: int, timeout_s: float =
 		candidate = api.getFocusObject()
 		candidate_hwnd = getattr(candidate, "windowHandle", None) or 0
 		root = winUser.getAncestor(candidate_hwnd, _GA_ROOT) if candidate_hwnd else 0
+		# Require a descendant, not the chrome itself: after SetForegroundWindow
+		# NVDA briefly reports focus on the outer Notepad window (role=WINDOW),
+		# then refines to the inner RichEditD2DPT edit. Matching on the chrome
+		# leads to updateCaret raising NotImplementedError.
 		is_descendant = candidate_hwnd and root == notepad_hwnd and candidate_hwnd != notepad_hwnd
 		if is_descendant:
 			try:
