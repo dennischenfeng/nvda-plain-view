@@ -37,7 +37,7 @@ TEMP_PATH = os.path.join(tempfile.gettempdir(), TEMP_FILENAME)
 
 _user32 = ctypes.windll.user32
 _EnumWindowsProc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-_SW_RESTORE = 9
+_SW_MAXIMIZE = 3
 _GA_ROOT = 2
 
 # Claude Code attention-point patterns, ported from the VS Code prototype.
@@ -97,7 +97,7 @@ def _find_notepad_hwnd(needle: str, timeout_s: float = 1.5) -> int | None:
 
 
 def _foreground_window(hwnd: int) -> None:
-	_user32.ShowWindow(hwnd, _SW_RESTORE)
+	_user32.ShowWindow(hwnd, _SW_MAXIMIZE)
 	_user32.SetForegroundWindow(hwnd)
 
 
