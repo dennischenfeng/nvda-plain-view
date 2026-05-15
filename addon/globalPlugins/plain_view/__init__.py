@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-# Plain View NVDA add-on
+# PlainView NVDA add-on
 # Copyright (C) 2026 Dennis Feng
 #
 # This program is free software; you can redistribute it and/or modify
@@ -42,6 +42,22 @@ _GA_ROOT = 2
 _CC_ITEM_LINE_RE = re.compile(r"^[∴●>❯!].*\S")
 _CC_HRULE = "───"
 _CC_PROMPT_SCAN_LINES = 10
+
+
+def _line_is_cc_item(line: str) -> bool:
+	return _CC_ITEM_LINE_RE.search(line) is not None
+
+
+def _line_is_hrule(line: str) -> bool:
+	return _CC_HRULE in line
+
+
+def _speak_caret_line(obj) -> None:
+	"""Cancel any in-progress speech and speak the line containing `obj`'s caret."""
+	lineInfo = obj.makeTextInfo(textInfos.POSITION_CARET)
+	lineInfo.expand(textInfos.UNIT_LINE)
+	speech.cancelSpeech()
+	speech.speakTextInfo(lineInfo, reason=controlTypes.OutputReason.CARET)
 
 
 def _grab_focused_text() -> str:
@@ -121,11 +137,9 @@ def _find_claude_code_attention_line(text: str) -> int | None:
 	lines = text.splitlines()
 	if not lines:
 		return None
-	awaiting_prompt = _is_claude_code_awaiting_regular_prompt(lines)
+	predicate = _line_is_cc_item if _is_claude_code_awaiting_regular_prompt(lines) else _line_is_hrule
 	for idx in range(len(lines) - 1, -1, -1):
-		line = lines[idx]
-		matched = _CC_ITEM_LINE_RE.search(line) if awaiting_prompt else _CC_HRULE in line
-		if matched:
+		if predicate(lines[idx]):
 			return idx + 1
 	return None
 
@@ -156,10 +170,7 @@ def _move_notepad_caret_to_line(notepad_hwnd: int, line: int, timeout_s: float =
 				moved = ti.move(textInfos.UNIT_PARAGRAPH, want) if want > 0 else 0
 				if moved == want:
 					ti.updateCaret()
-					lineInfo = candidate.makeTextInfo(textInfos.POSITION_CARET)
-					lineInfo.expand(textInfos.UNIT_LINE)
-					speech.cancelSpeech()
-					speech.speakTextInfo(lineInfo, reason=controlTypes.OutputReason.CARET)
+					_speak_caret_line(candidate)
 					return
 				# Short move means the document isn't fully loaded yet; keep polling.
 				log.debug("PlainView: short paragraph move (%s of %s); continuing to poll", moved, want)
@@ -176,6 +187,47 @@ def _move_notepad_caret_to_line(notepad_hwnd: int, line: int, timeout_s: float =
 	core.callLater(interval_ms, _try, attempts)
 
 
+def _nav_by_predicate(predicate, forward: bool) -> None:
+	"""Move the caret of the currently-focused text control to the next/previous
+	paragraph where `predicate(text)` is truthy. Speaks the landing line, or
+	announces "No more matches" if nothing matches in the chosen direction.
+
+	Walks paragraph-by-paragraph from the caret; avoids slurping the whole
+	document on every keystroke.
+	"""
+	obj = api.getFocusObject()
+	try:
+		cur = obj.makeTextInfo(textInfos.POSITION_CARET)
+		# Normalize to the start of the current paragraph so subsequent moves
+		# are unambiguous and the current paragraph is excluded from search.
+		cur.expand(textInfos.UNIT_PARAGRAPH)
+		cur.collapse()
+	except (NotImplementedError, RuntimeError):
+		log.debug("PlainView: nav skipped — focused object has no usable TextInfo", exc_info=True)
+		return
+	step = 1 if forward else -1
+	while True:
+		try:
+			moved = cur.move(textInfos.UNIT_PARAGRAPH, step)
+		except Exception:
+			log.debug("PlainView: paragraph move failed during nav", exc_info=True)
+			return
+		if moved == 0:
+			break
+		probe = cur.copy()
+		probe.expand(textInfos.UNIT_PARAGRAPH)
+		if predicate(probe.text):
+			try:
+				cur.updateCaret()
+			except Exception:
+				log.debug("PlainView: updateCaret failed during nav", exc_info=True)
+				return
+			_speak_caret_line(obj)
+			return
+	speech.cancelSpeech()
+	ui.message(_("No more matches"))
+
+
 def _open_plain_view() -> tuple[int, str] | None:
 	"""Phase 1 core: scrape focused window text → temp file → Notepad → foreground.
 
@@ -188,19 +240,19 @@ def _open_plain_view() -> tuple[int, str] | None:
 			f.write(text)
 	except OSError:
 		log.error("PlainView: failed to write temp file %s", TEMP_PATH, exc_info=True)
-		ui.message(_("Plain View: could not write temp file"))
+		ui.message(_("PlainView: could not write temp file"))
 		return None
 
 	try:
 		subprocess.Popen(["notepad.exe", TEMP_PATH], close_fds=True)
 	except OSError:
 		log.error("PlainView: failed to launch Notepad", exc_info=True)
-		ui.message(_("Plain View: could not launch Notepad"))
+		ui.message(_("PlainView: could not launch Notepad"))
 		return None
 
 	hwnd = _find_notepad_hwnd(TEMP_FILENAME)
 	if hwnd is None:
-		ui.message(_("Plain View: could not locate Notepad window"))
+		ui.message(_("PlainView: could not locate Notepad window"))
 		return None
 
 	_foreground_window(hwnd)
@@ -208,19 +260,19 @@ def _open_plain_view() -> tuple[int, str] | None:
 
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
-	scriptCategory = "Plain View"
+	scriptCategory = "PlainView"
 
 	@script(
-		description=_("Open Plain View: copy terminal text to a temp file and open it in Notepad."),
-		category="Plain View",
+		description=_("Open PlainView: copy terminal text to a temp file and open it in Notepad."),
+		category="PlainView",
 		gesture=None,
 	)
 	def script_openPlainView(self, gesture):
 		_open_plain_view()
 
 	@script(
-		description=_("Open Plain View with Claude Code attention jump."),
-		category="Plain View",
+		description=_("Open PlainView with Claude Code attention jump."),
+		category="PlainView",
 		gesture=None,
 	)
 	def script_openPlainViewWithClaudeCodeAttentionJump(self, gesture):
@@ -233,3 +285,35 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(_("No Claude Code attention point found"))
 			return
 		_move_notepad_caret_to_line(hwnd, target_line)
+
+	@script(
+		description=_("PlainView: jump to next Claude Code item line."),
+		category="PlainView",
+		gesture=None,
+	)
+	def script_nextClaudeCodeItem(self, gesture):
+		_nav_by_predicate(_line_is_cc_item, forward=True)
+
+	@script(
+		description=_("PlainView: jump to previous Claude Code item line."),
+		category="PlainView",
+		gesture=None,
+	)
+	def script_previousClaudeCodeItem(self, gesture):
+		_nav_by_predicate(_line_is_cc_item, forward=False)
+
+	@script(
+		description=_("PlainView: jump to next horizontal rule."),
+		category="PlainView",
+		gesture=None,
+	)
+	def script_nextHorizontalRule(self, gesture):
+		_nav_by_predicate(_line_is_hrule, forward=True)
+
+	@script(
+		description=_("PlainView: jump to previous horizontal rule."),
+		category="PlainView",
+		gesture=None,
+	)
+	def script_previousHorizontalRule(self, gesture):
+		_nav_by_predicate(_line_is_hrule, forward=False)

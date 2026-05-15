@@ -20,10 +20,10 @@ addon_info = {
 	# Add-on summary, usually the user visible name of the addon.
 	# Translators: Summary for this add-on
 	# to be shown on installation and add-on information found in Add-ons Manager.
-	"addon_summary": _("Plain View"),
+	"addon_summary": _("PlainView"),
 	# Add-on description
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
-	"addon_description": _("""Plain View add-on.
+	"addon_description": _("""PlainView add-on.
 Pipes terminal text into Notepad for easier screen-reader navigation, with quickjump-style bookmarks for jumping around the dumped content."""),
 	# version
 	"addon_version": "0.1.0",

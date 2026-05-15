@@ -1,17 +1,26 @@
-# Plain View
+# PlainView
 
 An NVDA add-on that pipes the focused terminal's text into Notepad for easier screen-reader navigation. Built for working alongside CLI tools (e.g. Claude Code) where scrolling and jumping around the output with a screen reader is awkward.
 
 ## What it does
 
-Two scripts, both unbound by default — assign keys via NVDA's Input Gestures dialog under the **Plain View** category.
+Six scripts, all unbound by default — assign keys via NVDA's Input Gestures dialog under the **PlainView** category.
 
-- **Open Plain View** — copies the focused terminal's text via NVDA's TextInfo, writes it to `%TEMP%\plainview.txt`, opens that file in Notepad (a new tab in the existing Notepad instance on Win11), and brings Notepad to the foreground maximized.
-- **Open Plain View with Claude Code attention jump** — same as above, plus moves the caret to the most useful read-from line for Claude Code output and speaks it (cancelling any in-progress speech). Specifically:
+Capture and surface:
+
+- **Open PlainView** — copies the focused terminal's text via NVDA's TextInfo, writes it to `%TEMP%\plainview.txt`, opens that file in Notepad (a new tab in the existing Notepad instance on Win11), and brings Notepad to the foreground maximized.
+- **Open PlainView with Claude Code attention jump** — same as above, plus moves the caret to the most useful read-from line for Claude Code output and speaks it (cancelling any in-progress speech). Specifically:
   - If Claude is awaiting a regular text prompt (the `───` / `❯` / `───` input box is visible near the bottom): the caret jumps to the most recent line beginning with one of `∴ ● > ❯ !`.
   - Otherwise (e.g. Claude is asking a multiple-choice question): the caret jumps to the most recent `───` divider.
 
-If no attention point can be identified, the add-on says "No Claude Code attention point found" and leaves the caret at the top of the file.
+  If no attention point can be identified, the add-on says "No Claude Code attention point found" and leaves the caret at the top of the file.
+
+Navigate within the dumped (or any focused) text control — each of these jumps the caret in the chosen direction, speaks the landing line, or announces "No more matches" if nothing's left in that direction:
+
+- **Jump to next / previous Claude Code item line** — lines starting with one of `∴ ● > ❯ !` (assistant turns, tool calls, prompt indicators).
+- **Jump to next / previous horizontal rule** — lines containing `───` (Claude's section dividers).
+
+These four navigation scripts operate on whatever editable text control is currently focused — typically the Notepad opened by PlainView, but they'll work in any editor that exposes a TextInfo (VS Code, Word, etc.).
 
 ## Installation
 
