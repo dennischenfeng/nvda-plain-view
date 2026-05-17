@@ -48,4 +48,10 @@ A few things worth knowing if you read the code or hit unexpected behaviour:
 
 ## License
 
-GPL v2 (see `COPYING.txt`). This is required because the project incorporates code patterns derived from mltony's GPL v2 NVDA add-ons. Any redistribution must include source.
+GPL v2 (see `COPYING.txt`). Any redistribution must include source.
+
+## Credits
+
+- Built on top of the official [NVDA AddonTemplate](https://github.com/nvaccess/addonTemplate). The `sconstruct`, `site_scons/`, manifest templates, and related build infrastructure come from that template — copyright (C) 2012–2025 Rui Batista, Noelia Martinez, Joseph Lee, and the NVDA Add-on team contributors.
+- The GitHub Actions release workflow was contributed to the AddonTemplate by [alekssamos](https://github.com/alekssamos/) — copyright (C) 2022 alekssamos.
+- The add-on's design was initially inspired by mltony's GPL v2 NVDA add-ons (`nvda-task-switcher`, `nvda-indent-nav`); the GPL v2 license was retained from that lineage. No code is copied from those repositories in the current source.
