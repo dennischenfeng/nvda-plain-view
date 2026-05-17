@@ -10,6 +10,7 @@ Capture and surface:
 
 - **Open PlainView** — copies the focused terminal's text via NVDA's TextInfo, writes it to `%TEMP%\plainview.txt`, opens that file in Notepad (a new tab in the existing Notepad instance on Win11), and brings Notepad to the foreground maximized.
 - **Open PlainView with Claude Code attention jump** — same as above, plus moves the caret to the most useful read-from line for Claude Code output and speaks it (cancelling any in-progress speech). Specifically:
+
   - If Claude is awaiting a regular text prompt (the `───` / `❯` / `───` input box is visible near the bottom): the caret jumps to the most recent line beginning with one of `∴ ● > ❯ !`.
   - Otherwise (e.g. Claude is asking a multiple-choice question): the caret jumps to the most recent `───` divider.
 
@@ -34,7 +35,7 @@ Requires [`uv`](https://docs.astral.sh/uv/):
 uv run scons
 ```
 
-The built package lands at `dist/PlainView-<version>.nvda-addon`.
+The built package lands at `PlainView-<version>.nvda-addon` at the repo root.
 
 ## Implementation notes
 
