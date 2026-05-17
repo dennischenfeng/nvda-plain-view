@@ -43,6 +43,10 @@ _GA_ROOT = 2
 _CC_ITEM_LINE_RE = re.compile(r"^[∴●>❯!].*\S")
 _CC_HRULE = "───"
 _CC_PROMPT_SCAN_LINES = 10
+# Matches a line whose first non-whitespace character is the ❯ chevron Claude
+# Code uses to mark the currently selected multiple-choice option; captures the
+# text after it.
+_CC_SELECTED_OPTION_RE = re.compile(r"^\s*❯\s*(.*)$")
 
 
 def _line_is_cc_item(line: str) -> bool:
@@ -51,6 +55,18 @@ def _line_is_cc_item(line: str) -> bool:
 
 def _line_is_hrule(line: str) -> bool:
     return _CC_HRULE in line
+
+
+def _find_last_claude_code_selected_option(text: str) -> str | None:
+    """Return the text after the last `❯ ` chevron-prefixed line in `text`, or
+    None if no such line is present.
+    """
+    last_match: str | None = None
+    for line in text.split("\n"):
+        m = _CC_SELECTED_OPTION_RE.match(line)
+        if m:
+            last_match = m.group(1)
+    return last_match
 
 
 def _speak_caret_line(obj) -> None:
@@ -329,3 +345,44 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     )
     def script_previousHorizontalRule(self, gesture):
         _nav_by_predicate(_line_is_hrule, forward=False)
+
+    @script(
+        description=_("PlainView: speak the currently selected Claude Code option."),
+        category="PlainView",
+        gesture=None,
+    )
+    def script_speakClaudeCodeSelectedOption(self, gesture):
+        selected = _find_last_claude_code_selected_option(_grab_focused_text())
+        speech.cancelSpeech()
+        if selected is not None:
+            speech.speakMessage(selected)
+        else:
+            ui.message(_("No selected option found"))
+
+    @script(
+        description=_("PlainView: speak the current line number and total line count."),
+        category="PlainView",
+        gesture=None,
+    )
+    def script_speakLinePosition(self, gesture):
+        obj = api.getFocusObject()
+        try:
+            all_ti = obj.makeTextInfo(textInfos.POSITION_ALL)
+            caret_ti = obj.makeTextInfo(textInfos.POSITION_CARET)
+            head = obj.makeTextInfo(textInfos.POSITION_FIRST)
+            head.setEndPoint(caret_ti, "endToStart")
+        except (NotImplementedError, RuntimeError):
+            log.debug(
+                "PlainView: line position skipped — focused object has no usable TextInfo",
+                exc_info=True,
+            )
+            return
+        # Win11 Notepad's UIA GetText() returns \r-only line endings.
+        head_text = head.text.replace("\r\n", "\n").replace("\r", "\n")
+        current_line = head_text.count("\n") + 1
+        total_lines = len(all_ti.text.splitlines())
+        ui.message(
+            _("Current line: {current}. Total lines: {total}.").format(
+                current=current_line, total=total_lines
+            )
+        )
