@@ -24,10 +24,10 @@ addon_info = AddonInfo(
 	addon_description=_("""PlainView add-on.
 Pipes terminal text into Notepad for easier screen-reader navigation, with Claude Code-aware attention-point and regex-nav gestures."""),
 	# version
-	addon_version="0.1.0",
+	addon_version="0.2.0",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("Initial release."),
+	addon_changelog=_("Dropped the clipboard fallback when grabbing focused text; the add-on now announces a message instead when the focused control does not expose readable text. Dumped temp file output is now tidied: trailing whitespace is stripped from every line and trailing blank lines are removed."),
 	# Author(s)
 	addon_author="Dennis Feng <dennisfeng2@gmail.com>",
 	# URL for the add-on documentation support

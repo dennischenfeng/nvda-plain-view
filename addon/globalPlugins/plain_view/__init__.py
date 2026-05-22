@@ -77,11 +77,24 @@ def _speak_caret_line(obj) -> None:
     speech.speakTextInfo(lineInfo, reason=controlTypes.OutputReason.CARET)
 
 
-def _grab_focused_text() -> str:
+def _tidy_dump(text: str) -> str:
+    """Strip trailing whitespace from every line and drop trailing blank lines.
+    Preserves blank lines in the body; only fully-whitespace lines at the very
+    end of the document are removed.
+    """
+    lines = [line.rstrip() for line in text.splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def _grab_focused_text() -> str | None:
     """Pull all text from the currently-focused object via NVDA's TextInfo APIs.
 
-    Falls back to the clipboard if TextInfo can't produce a POSITION_ALL range
-    (some terminals/controls don't support it cleanly).
+    Returns None and announces the situation if the focused control doesn't
+    expose a usable POSITION_ALL range or yields no text.
     """
     focus = api.getFocusObject()
     try:
@@ -90,14 +103,11 @@ def _grab_focused_text() -> str:
         if text:
             return text
     except Exception:
-        log.debug(
-            "PlainView: POSITION_ALL TextInfo failed; falling back to clipboard", exc_info=True
-        )
-    try:
-        return api.getClipData() or ""
-    except Exception:
-        log.debug("PlainView: clipboard fallback failed", exc_info=True)
-        return ""
+        log.debug("PlainView: POSITION_ALL TextInfo failed", exc_info=True)
+        ui.message(_("PlainView: focused control does not expose readable text"))
+        return None
+    ui.message(_("PlainView: focused control returned no text"))
+    return None
 
 
 def _find_notepad_hwnd(needle: str, timeout_s: float = 1.5) -> int | None:
@@ -263,6 +273,9 @@ def _open_plain_view() -> tuple[int, str] | None:
     such that we couldn't get Notepad on screen with our file.
     """
     text = _grab_focused_text()
+    if text is None:
+        return None
+    text = _tidy_dump(text)
     try:
         with open(TEMP_PATH, "w", encoding="utf-8", newline="") as f:
             f.write(text)
@@ -352,7 +365,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         gesture=None,
     )
     def script_speakClaudeCodeSelectedOption(self, gesture):
-        selected = _find_last_claude_code_selected_option(_grab_focused_text())
+        text = _grab_focused_text()
+        if text is None:
+            return
+        selected = _find_last_claude_code_selected_option(text)
         speech.cancelSpeech()
         if selected is not None:
             speech.speakMessage(selected)
