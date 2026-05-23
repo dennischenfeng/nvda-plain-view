@@ -15,13 +15,17 @@ import tempfile
 import time
 
 import api
+import config
 import controlTypes
 import core
 import globalPluginHandler
+import gui
 import speech
 import textInfos
 import ui
 import winUser
+import wx
+from gui.settingsDialogs import NVDASettingsDialog, SettingsPanel
 from logHandler import log
 from scriptHandler import script
 
@@ -35,6 +39,45 @@ except Exception:
 
 TEMP_FILENAME = "plainview.txt"
 TEMP_PATH = os.path.join(tempfile.gettempdir(), TEMP_FILENAME)
+
+CONFIG_SECTION = "plainView"
+EDITOR_NOTEPAD = "notepad"
+EDITOR_NOTEPAD_PP = "notepadpp"
+_EDITOR_CHOICES = (EDITOR_NOTEPAD, EDITOR_NOTEPAD_PP)
+
+config.conf.spec[CONFIG_SECTION] = {
+    "editor": f"option({', '.join(repr(c) for c in _EDITOR_CHOICES)}, default='{EDITOR_NOTEPAD}')",
+}
+
+
+class PlainViewSettingsPanel(SettingsPanel):
+    # Translators: title of the PlainView category in NVDA's Settings dialog.
+    title = _("PlainView")
+
+    # Translators: labels for the editor radio choices, in the same order as
+    # _EDITOR_CHOICES above.
+    _EDITOR_LABELS = (_("&Notepad"), _("Notepad&++"))
+
+    def makeSettings(self, settingsSizer):
+        helper = gui.guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
+        # Translators: label for the editor radio box in PlainView settings.
+        self.editorRadio = helper.addItem(
+            wx.RadioBox(
+                self,
+                label=_("Editor used to open the dumped text"),
+                choices=list(self._EDITOR_LABELS),
+                majorDimension=1,
+                style=wx.RA_SPECIFY_COLS,
+            )
+        )
+        current = config.conf[CONFIG_SECTION]["editor"]
+        try:
+            self.editorRadio.SetSelection(_EDITOR_CHOICES.index(current))
+        except ValueError:
+            self.editorRadio.SetSelection(0)
+
+    def onSave(self):
+        config.conf[CONFIG_SECTION]["editor"] = _EDITOR_CHOICES[self.editorRadio.GetSelection()]
 
 _SW_MAXIMIZE = 3
 _GA_ROOT = 2
@@ -110,18 +153,18 @@ def _grab_focused_text() -> str | None:
     return None
 
 
-def _find_notepad_hwnd(needle: str, timeout_s: float = 1.5) -> int | None:
+def _find_notepad_hwnd(needle: str, title_suffix: str, timeout_s: float = 1.5) -> int | None:
     """Find a visible top-level window whose title contains `needle` and ends
-    with " - Notepad". Polls until the window appears or `timeout_s` elapses.
+    with `title_suffix`. Polls until the window appears or `timeout_s` elapses.
     Works for both classic Notepad (new process per launch) and Win11 tabbed
-    Notepad (new tab in singleton).
+    Notepad (new tab in singleton); also works for Notepad++.
     """
 
     def predicate(hwnd: int) -> bool:
         if not winUser.isWindowVisible(hwnd):
             return False
         title = winUser.getWindowText(hwnd)
-        return needle in title and title.endswith(" - Notepad")
+        return needle in title and title.endswith(title_suffix)
 
     # Synchronous poll: blocks NVDA's main thread for up to timeout_s. Accepted
     # because EnumWindows doesn't depend on NVDA's event loop; switching to
@@ -266,11 +309,28 @@ def _nav_by_predicate(predicate, forward: bool) -> None:
     ui.message(_("No more matches"))
 
 
-def _open_plain_view() -> tuple[int, str] | None:
-    """Phase 1 core: scrape focused window text → temp file → Notepad → foreground.
+def _resolve_editor_command() -> tuple[list[str], str, str] | None:
+    """Return (argv-prefix, window-title-suffix, friendly-name) for the editor
+    selected in config, or None if the configured editor cannot be located.
+    """
+    editor = config.conf[CONFIG_SECTION]["editor"]
+    if editor == EDITOR_NOTEPAD_PP:
+        for candidate in (
+            r"C:\Program Files\Notepad++\notepad++.exe",
+            r"C:\Program Files (x86)\Notepad++\notepad++.exe",
+        ):
+            if os.path.isfile(candidate):
+                return [candidate], " - Notepad++", "Notepad++"
+        ui.message(_("PlainView: Notepad++ not found; check the editor setting"))
+        return None
+    return ["notepad.exe"], " - Notepad", "Notepad"
 
-    Returns (notepad_hwnd, dumped_text) on success, or None if any step failed
-    such that we couldn't get Notepad on screen with our file.
+
+def _open_plain_view() -> tuple[int, str] | None:
+    """Phase 1 core: scrape focused window text → temp file → editor → foreground.
+
+    Returns (editor_hwnd, dumped_text) on success, or None if any step failed
+    such that we couldn't get the editor on screen with our file.
     """
     text = _grab_focused_text()
     if text is None:
@@ -284,16 +344,21 @@ def _open_plain_view() -> tuple[int, str] | None:
         ui.message(_("PlainView: could not write temp file"))
         return None
 
+    resolved = _resolve_editor_command()
+    if resolved is None:
+        return None
+    argv_prefix, title_suffix, friendly = resolved
+
     try:
-        subprocess.Popen(["notepad.exe", TEMP_PATH], close_fds=True)
+        subprocess.Popen([*argv_prefix, TEMP_PATH], close_fds=True)
     except OSError:
-        log.error("PlainView: failed to launch Notepad", exc_info=True)
-        ui.message(_("PlainView: could not launch Notepad"))
+        log.error("PlainView: failed to launch %s", friendly, exc_info=True)
+        ui.message(_("PlainView: could not launch {editor}").format(editor=friendly))
         return None
 
-    hwnd = _find_notepad_hwnd(TEMP_FILENAME)
+    hwnd = _find_notepad_hwnd(TEMP_FILENAME, title_suffix)
     if hwnd is None:
-        ui.message(_("PlainView: could not locate Notepad window"))
+        ui.message(_("PlainView: could not locate {editor} window").format(editor=friendly))
         return None
 
     _foreground_window(hwnd)
@@ -302,6 +367,17 @@ def _open_plain_view() -> tuple[int, str] | None:
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     scriptCategory = "PlainView"
+
+    def __init__(self):
+        super().__init__()
+        NVDASettingsDialog.categoryClasses.append(PlainViewSettingsPanel)
+
+    def terminate(self):
+        try:
+            NVDASettingsDialog.categoryClasses.remove(PlainViewSettingsPanel)
+        except ValueError:
+            pass
+        super().terminate()
 
     @script(
         description=_("Open PlainView: copy terminal text to a temp file and open it in Notepad."),
