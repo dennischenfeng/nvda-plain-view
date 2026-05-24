@@ -54,30 +54,26 @@ class PlainViewSettingsPanel(SettingsPanel):
     # Translators: title of the PlainView category in NVDA's Settings dialog.
     title = _("PlainView")
 
-    # Translators: labels for the editor radio choices, in the same order as
-    # _EDITOR_CHOICES above.
-    _EDITOR_LABELS = (_("&Notepad"), _("Notepad&++"))
+    # Translators: labels for the editor combo box choices, in the same order
+    # as _EDITOR_CHOICES above.
+    _EDITOR_LABELS = (_("Notepad"), _("Notepad++"))
 
     def makeSettings(self, settingsSizer):
         helper = gui.guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
-        # Translators: label for the editor radio box in PlainView settings.
-        self.editorRadio = helper.addItem(
-            wx.RadioBox(
-                self,
-                label=_("Editor used to open the dumped text"),
-                choices=list(self._EDITOR_LABELS),
-                majorDimension=1,
-                style=wx.RA_SPECIFY_COLS,
-            )
+        # Translators: label for the editor combo box in PlainView settings.
+        self.editorCombo = helper.addLabeledControl(
+            _("&Editor used to open the dumped text:"),
+            wx.Choice,
+            choices=list(self._EDITOR_LABELS),
         )
         current = config.conf[CONFIG_SECTION]["editor"]
         try:
-            self.editorRadio.SetSelection(_EDITOR_CHOICES.index(current))
+            self.editorCombo.SetSelection(_EDITOR_CHOICES.index(current))
         except ValueError:
-            self.editorRadio.SetSelection(0)
+            self.editorCombo.SetSelection(0)
 
     def onSave(self):
-        config.conf[CONFIG_SECTION]["editor"] = _EDITOR_CHOICES[self.editorRadio.GetSelection()]
+        config.conf[CONFIG_SECTION]["editor"] = _EDITOR_CHOICES[self.editorCombo.GetSelection()]
 
 _SW_MAXIMIZE = 3
 _GA_ROOT = 2
@@ -153,7 +149,7 @@ def _grab_focused_text() -> str | None:
     return None
 
 
-def _find_notepad_hwnd(needle: str, title_suffix: str, timeout_s: float = 1.5) -> int | None:
+def _find_notepad_hwnd(needle: str, title_suffix: str, timeout_s: float) -> int | None:
     """Find a visible top-level window whose title contains `needle` and ends
     with `title_suffix`. Polls until the window appears or `timeout_s` elapses.
     Works for both classic Notepad (new process per launch) and Win11 tabbed
@@ -309,9 +305,10 @@ def _nav_by_predicate(predicate, forward: bool) -> None:
     ui.message(_("No more matches"))
 
 
-def _resolve_editor_command() -> tuple[list[str], str, str] | None:
-    """Return (argv-prefix, window-title-suffix, friendly-name) for the editor
-    selected in config, or None if the configured editor cannot be located.
+def _resolve_editor_command() -> tuple[list[str], str, str, float] | None:
+    """Return (argv-prefix, window-title-suffix, friendly-name, find-timeout-s)
+    for the editor selected in config, or None if the configured editor cannot
+    be located.
     """
     editor = config.conf[CONFIG_SECTION]["editor"]
     if editor == EDITOR_NOTEPAD_PP:
@@ -320,10 +317,10 @@ def _resolve_editor_command() -> tuple[list[str], str, str] | None:
             r"C:\Program Files (x86)\Notepad++\notepad++.exe",
         ):
             if os.path.isfile(candidate):
-                return [candidate], " - Notepad++", "Notepad++"
+                return [candidate], " - Notepad++", "Notepad++", 1.5
         ui.message(_("PlainView: Notepad++ not found; check the editor setting"))
         return None
-    return ["notepad.exe"], " - Notepad", "Notepad"
+    return ["notepad.exe"], " - Notepad", "Notepad", 1.5
 
 
 def _open_plain_view() -> tuple[int, str] | None:
@@ -347,7 +344,7 @@ def _open_plain_view() -> tuple[int, str] | None:
     resolved = _resolve_editor_command()
     if resolved is None:
         return None
-    argv_prefix, title_suffix, friendly = resolved
+    argv_prefix, title_suffix, friendly, find_timeout_s = resolved
 
     try:
         subprocess.Popen([*argv_prefix, TEMP_PATH], close_fds=True)
@@ -356,7 +353,7 @@ def _open_plain_view() -> tuple[int, str] | None:
         ui.message(_("PlainView: could not launch {editor}").format(editor=friendly))
         return None
 
-    hwnd = _find_notepad_hwnd(TEMP_FILENAME, title_suffix)
+    hwnd = _find_notepad_hwnd(TEMP_FILENAME, title_suffix, find_timeout_s)
     if hwnd is None:
         ui.message(_("PlainView: could not locate {editor} window").format(editor=friendly))
         return None
