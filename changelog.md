@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+Added Codex CLI support, mirroring the Claude Code scripts:
+
+- **Open PlainView with Codex attention jump** — dumps the focused terminal, then moves the caret to the most recent `•` bullet line (the start of the latest Codex response) and speaks it.
+- **Jump to next / previous Codex item line** — caret-walks between lines starting with `•` (assistant response bullets) or `›` (user prompts).
+
+The Claude Code item nav (and attention jump) now also recognizes `•` bullet and `›` lines.
+
+The "speak the currently selected Claude Code option" script now also recognizes Codex's `›` selection chevron, so it works for both Claude Code (`❯`) and Codex menus.
+
 ## 0.1.0
 
 Initial release.

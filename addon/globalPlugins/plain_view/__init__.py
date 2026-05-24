@@ -80,17 +80,38 @@ _SW_MAXIMIZE = 3
 _GA_ROOT = 2
 
 # Claude Code attention-point patterns, ported from the VS Code prototype.
-_CC_ITEM_LINE_RE = re.compile(r"^[∴●>❯!].*\S")
+_CC_ITEM_LINE_RE = re.compile(r"^[∴●•›>❯!].*\S")
 _CC_HRULE = "───"
 _CC_PROMPT_SCAN_LINES = 10
-# Matches a line whose first non-whitespace character is the ❯ chevron Claude
-# Code uses to mark the currently selected multiple-choice option; captures the
-# text after it.
-_CC_SELECTED_OPTION_RE = re.compile(r"^\s*❯\s*(.*)$")
+# Matches a line whose first non-whitespace character is the selection chevron
+# used to mark the currently highlighted multiple-choice option — ❯ in Claude
+# Code, › in Codex — and captures the text after it.
+_CC_SELECTED_OPTION_RE = re.compile(r"^\s*[❯›]\s*(.*)$")
+
+# Codex CLI markers. `•` prefixes each assistant response/step; `›` prefixes the
+# user prompt line. Nav considers both; the attention jump targets bullets only,
+# since the goal is the start of the most recent assistant response.
+_CODEX_ITEM_LINE_RE = re.compile(r"^[•›].*\S")
+_CODEX_BULLET_RE = re.compile(r"^•.*\S")
 
 
 def _line_is_cc_item(line: str) -> bool:
     return _CC_ITEM_LINE_RE.search(line) is not None
+
+
+def _line_is_codex_item(line: str) -> bool:
+    return _CODEX_ITEM_LINE_RE.search(line) is not None
+
+
+def _find_codex_attention_line(text: str) -> int | None:
+    """Return the 1-based line number of the last `•`-prefixed line in `text`,
+    or None if no bullet line is present.
+    """
+    lines = text.splitlines()
+    for idx in range(len(lines) - 1, -1, -1):
+        if _CODEX_BULLET_RE.search(lines[idx]):
+            return idx + 1
+    return None
 
 
 def _line_is_hrule(line: str) -> bool:
@@ -427,6 +448,38 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     )
     def script_previousClaudeCodeItem(self, gesture):
         _nav_by_predicate(_line_is_cc_item, forward=False)
+
+    @script(
+        description=_("Open PlainView with Codex attention jump."),
+        category="PlainView",
+        gesture=None,
+    )
+    def script_openPlainViewWithCodexAttentionJump(self, gesture):
+        result = _open_plain_view()
+        if result is None:
+            return
+        hwnd, text = result
+        target_line = _find_codex_attention_line(text)
+        if target_line is None:
+            ui.message(_("No Codex attention point found"))
+            return
+        _move_notepad_caret_to_line(hwnd, target_line)
+
+    @script(
+        description=_("PlainView: jump to next Codex item line."),
+        category="PlainView",
+        gesture=None,
+    )
+    def script_nextCodexItem(self, gesture):
+        _nav_by_predicate(_line_is_codex_item, forward=True)
+
+    @script(
+        description=_("PlainView: jump to previous Codex item line."),
+        category="PlainView",
+        gesture=None,
+    )
+    def script_previousCodexItem(self, gesture):
+        _nav_by_predicate(_line_is_codex_item, forward=False)
 
     @script(
         description=_("PlainView: jump to next horizontal rule."),
