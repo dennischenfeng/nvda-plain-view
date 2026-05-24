@@ -10,6 +10,7 @@
 import ctypes
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -312,12 +313,21 @@ def _resolve_editor_command() -> tuple[list[str], str, str, float] | None:
     """
     editor = config.conf[CONFIG_SECTION]["editor"]
     if editor == EDITOR_NOTEPAD_PP:
-        for candidate in (
+        # Per-user installer first (no admin rights required, common on locked
+        # down machines), then the two Program Files locations, then PATH.
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            os.path.join(local_app_data, r"Programs\Notepad++\notepad++.exe")
+            if local_app_data
+            else None,
             r"C:\Program Files\Notepad++\notepad++.exe",
             r"C:\Program Files (x86)\Notepad++\notepad++.exe",
-        ):
-            if os.path.isfile(candidate):
-                return [candidate], " - Notepad++", "Notepad++", 1.5
+            shutil.which("notepad++"),
+        ]
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate):
+                # Cold-start with plugins routinely exceeds 1.5s; give it 5s.
+                return [candidate], " - Notepad++", "Notepad++", 5.0
         ui.message(_("PlainView: Notepad++ not found; check the editor setting"))
         return None
     return ["notepad.exe"], " - Notepad", "Notepad", 1.5
@@ -377,7 +387,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         super().terminate()
 
     @script(
-        description=_("Open PlainView: copy terminal text to a temp file and open it in Notepad."),
+        description=_(
+            "Open PlainView: copy focused-window text to a temp file and open it in the configured editor."
+        ),
         category="PlainView",
         gesture=None,
     )
