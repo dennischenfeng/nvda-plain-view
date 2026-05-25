@@ -24,10 +24,10 @@ addon_info = AddonInfo(
 	addon_description=_("""PlainView add-on.
 Pipes terminal text into Notepad for easier screen-reader navigation, with Claude Code-aware attention-point and regex-nav gestures."""),
 	# version
-	addon_version="0.2.2",
+	addon_version="0.2.3",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("Added Codex CLI support: a Codex attention-jump script (jumps to the last `•` bullet, i.e. the start of the most recent Codex response) and next/previous Codex item nav scripts (walks between lines starting with `•` or `›`)."),
+	addon_changelog=_("Merged the Claude Code and Codex item-line nav into one pair of scripts, renamed next/previous CC or Codex message item line, and renamed the selected-option script to 'speak the currently selected CC or Codex option'; both already worked for either agent. Removed the speak-line-position script. Note: reassign gestures for the renamed and removed scripts in NVDA's Input Gestures dialog."),
 	# Author(s)
 	addon_author="Dennis Feng <dennisfeng2@gmail.com>",
 	# URL for the add-on documentation support

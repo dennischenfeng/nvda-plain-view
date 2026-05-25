@@ -1,6 +1,6 @@
 # PlainView
 
-An NVDA add-on that pipes the focused terminal's text into Notepad for easier screen-reader navigation. Built for working alongside CLI tools (e.g. Claude Code) where scrolling and jumping around the output with a screen reader is awkward.
+An NVDA add-on that pipes the focused terminal's text into Notepad for easier screen-reader navigation. Built for working alongside CLI tools (e.g. Claude Code, Codex) where scrolling and jumping around the output with a screen reader is awkward.
 
 ## What it does
 
@@ -16,17 +16,18 @@ Capture and surface:
 
   If no attention point can be identified, the add-on says "No Claude Code attention point found" and leaves the caret at the top of the file.
 
+- **Open PlainView with Codex attention jump** — same as Open PlainView, plus moves the caret to the most recent `•` bullet line (the start of the latest Codex response) and speaks it. Says "No Codex attention point found" if no bullet line is present.
+
 Navigate within the dumped (or any focused) text control — each of these jumps the caret in the chosen direction, speaks the landing line, or announces "No more matches" if nothing's left in that direction:
 
-- **Jump to next / previous Claude Code item line** — lines starting with one of `∴ ● > ❯ !` (assistant turns, tool calls, prompt indicators).
+- **Jump to next / previous CC or Codex message item line** — lines starting with one of `∴ ● • › > ❯ !` (Claude Code and Codex assistant turns, tool calls, prompt indicators).
 - **Jump to next / previous horizontal rule** — lines containing `───` (Claude's section dividers).
 
 These four navigation scripts operate on whatever editable text control is currently focused — typically the Notepad opened by PlainView, but they'll work in any editor that exposes a TextInfo (VS Code, Word, etc.).
 
 Announce in place (no caret move):
 
-- **Speak the currently selected Claude Code option** — when Claude shows a multiple-choice prompt, finds the most recent line in the focused terminal whose first non-whitespace character is `❯` (Claude's "currently selected" indicator) and speaks the option text after it. Says "No selected option found" if no `❯` line is present.
-- **Speak the current line number and total line count** — announces "Current line: N. Total lines: M." for the focused editable text control. Typically used in the Notepad opened by PlainView to get your bearings within a long dump.
+- **Speak the currently selected CC or Codex option** — when Claude Code or Codex shows a multiple-choice prompt, finds the most recent line in the focused terminal whose first non-whitespace character is the selection chevron (`❯` in Claude Code, `›` in Codex) and speaks the option text after it. Says "No selected option found" if no such line is present.
 
 ## Installation
 

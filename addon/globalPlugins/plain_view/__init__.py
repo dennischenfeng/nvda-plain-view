@@ -101,20 +101,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         )
 
     @script(
-        description=_("PlainView: jump to next Claude Code item line."),
+        description=_("PlainView: jump to next CC or Codex message item line."),
         category="PlainView",
         gesture=None,
     )
-    def script_nextClaudeCodeItem(self, gesture):
-        nvda_text.nav_by_predicate(text.line_is_cc_item, forward=True)
+    def script_nextCcOrCodexMessageItem(self, gesture):
+        nvda_text.nav_by_predicate(text.line_is_cc_or_codex_message_item, forward=True)
 
     @script(
-        description=_("PlainView: jump to previous Claude Code item line."),
+        description=_("PlainView: jump to previous CC or Codex message item line."),
         category="PlainView",
         gesture=None,
     )
-    def script_previousClaudeCodeItem(self, gesture):
-        nvda_text.nav_by_predicate(text.line_is_cc_item, forward=False)
+    def script_previousCcOrCodexMessageItem(self, gesture):
+        nvda_text.nav_by_predicate(text.line_is_cc_or_codex_message_item, forward=False)
 
     @script(
         description=_("Open PlainView with Codex attention jump."),
@@ -126,22 +126,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             text.find_codex_attention_line,
             _("No Codex attention point found"),
         )
-
-    @script(
-        description=_("PlainView: jump to next Codex item line."),
-        category="PlainView",
-        gesture=None,
-    )
-    def script_nextCodexItem(self, gesture):
-        nvda_text.nav_by_predicate(text.line_is_codex_item, forward=True)
-
-    @script(
-        description=_("PlainView: jump to previous Codex item line."),
-        category="PlainView",
-        gesture=None,
-    )
-    def script_previousCodexItem(self, gesture):
-        nvda_text.nav_by_predicate(text.line_is_codex_item, forward=False)
 
     @script(
         description=_("PlainView: jump to next horizontal rule."),
@@ -160,25 +144,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         nvda_text.nav_by_predicate(text.line_is_hrule, forward=False)
 
     @script(
-        description=_("PlainView: speak the currently selected Claude Code option."),
+        description=_("PlainView: speak the currently selected CC or Codex option."),
         category="PlainView",
         gesture=None,
     )
-    def script_speakClaudeCodeSelectedOption(self, gesture):
+    def script_speakCcOrCodexSelectedOption(self, gesture):
         dump = nvda_text.grab_focused_text()
         if dump is None:
             return
-        selected = text.find_last_claude_code_selected_option(dump)
+        selected = text.find_last_cc_or_codex_selected_option(dump)
         speech.cancelSpeech()
         if selected is not None:
             speech.speakMessage(selected)
         else:
             ui.message(_("No selected option found"))
-
-    @script(
-        description=_("PlainView: speak the current line number and total line count."),
-        category="PlainView",
-        gesture=None,
-    )
-    def script_speakLinePosition(self, gesture):
-        nvda_text.speak_line_position()

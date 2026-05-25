@@ -8,7 +8,7 @@
 # See COPYING.txt at the root of this project for the full license text.
 
 """NVDA caret/speech glue: read text from the focused control, navigate it
-paragraph-by-paragraph, move the editor caret, and speak position info.
+paragraph-by-paragraph, and move the editor caret.
 
 Everything here talks to NVDA's TextInfo/speech APIs. The pure pattern logic
 these functions act on lives in `text.py`; navigation takes a predicate so it
@@ -151,28 +151,3 @@ def nav_by_predicate(predicate, forward: bool) -> None:
             return
     speech.cancelSpeech()
     ui.message(_("No more matches"))
-
-
-def speak_line_position() -> None:
-    """Announce the caret's 1-based line number and the document's total line count."""
-    obj = api.getFocusObject()
-    try:
-        all_ti = obj.makeTextInfo(textInfos.POSITION_ALL)
-        caret_ti = obj.makeTextInfo(textInfos.POSITION_CARET)
-        head = obj.makeTextInfo(textInfos.POSITION_FIRST)
-        head.setEndPoint(caret_ti, "endToStart")
-    except (NotImplementedError, RuntimeError):
-        log.debug(
-            "PlainView: line position skipped — focused object has no usable TextInfo",
-            exc_info=True,
-        )
-        return
-    # Win11 Notepad's UIA GetText() returns \r-only line endings.
-    head_text = head.text.replace("\r\n", "\n").replace("\r", "\n")
-    current_line = head_text.count("\n") + 1
-    total_lines = len(all_ti.text.splitlines())
-    ui.message(
-        _("Current line: {current}. Total lines: {total}.").format(
-            current=current_line, total=total_lines
-        )
-    )

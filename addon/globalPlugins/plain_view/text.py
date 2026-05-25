@@ -18,19 +18,20 @@ way: the NVDA glue lives in the sibling modules.
 
 import re
 
-# Claude Code attention-point patterns, ported from the VS Code prototype.
-_CC_ITEM_LINE_RE = re.compile(r"^[∴●•›>❯!].*\S")
+# Message-item marker shared by Claude Code and Codex. The leading glyph set
+# covers Claude Code's ∴ ● > ❯ ! prefixes and Codex's • › prefixes, so a single
+# predicate walks message items in either agent's output.
+_CC_OR_CODEX_MESSAGE_ITEM_RE = re.compile(r"^[∴●•›>❯!].*\S")
 _CC_HRULE = "───"
 _CC_PROMPT_SCAN_LINES = 10
 # Matches a line whose first non-whitespace character is the selection chevron
 # used to mark the currently highlighted multiple-choice option — ❯ in Claude
 # Code, › in Codex — and captures the text after it.
-_CC_SELECTED_OPTION_RE = re.compile(r"^\s*[❯›]\s*(.*)$")
+_CC_OR_CODEX_SELECTED_OPTION_RE = re.compile(r"^\s*[❯›]\s*(.*)$")
 
-# Codex CLI markers. `•` prefixes each assistant response/step; `›` prefixes the
-# user prompt line. Nav considers both; the attention jump targets bullets only,
-# since the goal is the start of the most recent assistant response.
-_CODEX_ITEM_LINE_RE = re.compile(r"^[•›].*\S")
+# Codex CLI bullet: `•` prefixes each assistant response/step. The Codex
+# attention jump targets bullets only, since the goal is the start of the most
+# recent assistant response.
 _CODEX_BULLET_RE = re.compile(r"^•.*\S")
 
 
@@ -47,12 +48,8 @@ def tidy_dump(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def line_is_cc_item(line: str) -> bool:
-    return _CC_ITEM_LINE_RE.search(line) is not None
-
-
-def line_is_codex_item(line: str) -> bool:
-    return _CODEX_ITEM_LINE_RE.search(line) is not None
+def line_is_cc_or_codex_message_item(line: str) -> bool:
+    return _CC_OR_CODEX_MESSAGE_ITEM_RE.search(line) is not None
 
 
 def line_is_hrule(line: str) -> bool:
@@ -70,13 +67,13 @@ def find_codex_attention_line(text: str) -> int | None:
     return None
 
 
-def find_last_claude_code_selected_option(text: str) -> str | None:
-    """Return the text after the last `❯ ` chevron-prefixed line in `text`, or
-    None if no such line is present.
+def find_last_cc_or_codex_selected_option(text: str) -> str | None:
+    """Return the text after the last selection-chevron line in `text` (`❯` in
+    Claude Code, `›` in Codex), or None if no such line is present.
     """
     last_match: str | None = None
     for line in text.split("\n"):
-        m = _CC_SELECTED_OPTION_RE.match(line)
+        m = _CC_OR_CODEX_SELECTED_OPTION_RE.match(line)
         if m:
             last_match = m.group(1)
     return last_match
@@ -110,7 +107,9 @@ def find_claude_code_attention_line(text: str) -> int | None:
     if not lines:
         return None
     predicate = (
-        line_is_cc_item if _is_claude_code_awaiting_regular_prompt(lines) else line_is_hrule
+        line_is_cc_or_codex_message_item
+        if _is_claude_code_awaiting_regular_prompt(lines)
+        else line_is_hrule
     )
     for idx in range(len(lines) - 1, -1, -1):
         if predicate(lines[idx]):
