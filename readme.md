@@ -7,6 +7,7 @@ Example usage scenario to illustrate its benefits:
 - I press my hotkey (e.g. control+windows+j) to invoke the input gesture "Open PlainView with Codex attention jump", and immediately (<100 milliseconds) Notepad opens up and sets my cursor on the last AI assistant's message. Here, I typically invoke the "Read from cursor" command to read the full message.
 - This plaintext view (in text editor) gives me full navigation capabilities, like control-f to find text, text selection start/stop markers (default hotkeys NVDA+F9 and NVDA+F10), IndentNav bookmark jumping on regex matches, etc. I find that unlocking these navigation capabilities is helpful for my productivity on terminal.
 - I then press hotkeys for the input gesture "Jump to next/previous CC or Codex message item" to arrow up and down through the conversation, message by message, to read what occured.
+- Then, I press alt+tab to switch back to terminal, and continue my Codex session e.g. by typing another message.
 
 PlainView supports Notepad and Notepad++. Choose the editor in NVDA's
 PlainView settings panel.
