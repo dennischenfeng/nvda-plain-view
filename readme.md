@@ -1,63 +1,73 @@
 # PlainView
 
-An NVDA add-on that pipes the focused terminal's text into Notepad for easier screen-reader navigation. Built for working alongside CLI tools (e.g. Claude Code, Codex) where scrolling and jumping around the output with a screen reader is awkward.
+PlainView is an NVDA add-on that aims to simply and quickly open a plaintext view of the terminal, especially useful for efficiently interacting withCLI-based  AI coding agents like Claude Code or Codex CLI.
 
-## What it does
+Example usage scenario to illustrate its benefits:
+- let's say I'm using Codex CLI in Windows Terminal, and I'm several user turns into a Codex conversation session. Codex gives me a long response, and I find it difficult to navigate the text effectively using the NVDA review cursor within the Windows Terminal app
+- I press my hotkey (e.g. control+windows+j) to invoke the input gesture "Open PlainView with Codex attention jump", and immediately (<100 milliseconds) Notepad opens up and sets my cursor on the last AI assistant's message. Here, I typically invoke the "Read from cursor" command to read the full message.
+- This plaintext view (in text editor) gives me full navigation capabilities, like control-f to find text, text selection start/stop markers (default hotkeys NVDA+F9 and NVDA+F10), IndentNav bookmark jumping on regex matches, etc. I find that unlocking these navigation capabilities is helpful for my productivity on terminal.
+- I then press hotkeys for the input gesture "Jump to next/previous CC or Codex message item" to arrow up and down through the conversation, message by message, to read what occured.
 
-Eight scripts, all unbound by default — assign keys via NVDA's Input Gestures dialog under the **PlainView** category.
+PlainView supports Notepad and Notepad++. Choose the editor in NVDA's
+PlainView settings panel.
 
-Capture and surface:
+# Details on the main gesture script
+The main useful gesture script is called "Open PlainView with Codex attention jump" (or the Claude Code variant).
 
-- **Open PlainView** — copies the focused terminal's text via NVDA's TextInfo, writes it to `%TEMP%\plainview.txt`, opens that file in Notepad (a new tab in the existing Notepad instance on Win11), and brings Notepad to the foreground maximized.
-- **Open PlainView with Claude Code attention jump** — same as above, plus moves the caret to the most useful read-from line for Claude Code output and speaks it (cancelling any in-progress speech). Specifically:
+In particular, it performs the following sequence typically in <100 milliseconds:
+1. copies the active terminal text into a fixed temp file
+2. brings to foreground a text editor (like Notepad) and opens the temp file
+3. moves the cursor (caret) to a structurally meaningful position in the terminal text, likely where you want to pay attention to first. I call it the "attention point", e.g. for Codex CLI, the attention point is the start of line of the latest AI assistant's message in the conversation history typically.
 
-  - If Claude is awaiting a regular text prompt (the `───` / `❯` / `───` input box is visible near the bottom): the caret jumps to the most recent line beginning with one of `∴ ● > ❯ !`.
-  - Otherwise (e.g. Claude is asking a multiple-choice question): the caret jumps to the most recent `───` divider.
+## Input gesture scripts (i.e. keystrokes)
 
-  If no attention point can be identified, the add-on says "No Claude Code attention point found" and leaves the caret at the top of the file.
+PlainView scripts are unbound by default. Assign keys in NVDA's Input Gestures
+dialog under the **PlainView** category.
 
-- **Open PlainView with Codex attention jump** — same as Open PlainView, plus moves the caret to the most recent `•` bullet line (the start of the latest Codex response) and speaks it. Says "No Codex attention point found" if no bullet line is present.
+| Script | Description |
+| --- | --- |
+| Open PlainView | Copy focused-window text to `plainview.txt`, open it in the configured editor, and bring that editor forward. |
+| Open PlainView with Claude Code attention jump | Open PlainView, then jump to the most useful Claude Code line: the latest prompt/message marker for regular prompts, or the latest `───` divider for multiple-choice prompts. |
+| Open PlainView with Codex attention jump | Open PlainView, then jump to the latest Codex response bullet line. |
+| Jump to next CC or Codex message item line | Move to the next line starting with a Claude Code or Codex marker: `∴`, `●`, `•`, `›`, `>`, `❯`, or `!`. |
+| Jump to previous CC or Codex message item line | Move to the previous Claude Code or Codex message marker line. |
+| Jump to next horizontal rule | Move to the next line containing a Claude Code horizontal rule. |
+| Jump to previous horizontal rule | Move to the previous line containing a Claude Code horizontal rule. |
+| Speak the currently selected CC or Codex option | In a focused terminal, speak the latest selected multiple-choice option marked with `❯` or `›`. |
 
-Navigate within the dumped (or any focused) text control — each of these jumps the caret in the chosen direction, speaks the landing line, or announces "No more matches" if nothing's left in that direction:
-
-- **Jump to next / previous CC or Codex message item line** — lines starting with one of `∴ ● • › > ❯ !` (Claude Code and Codex assistant turns, tool calls, prompt indicators).
-- **Jump to next / previous horizontal rule** — lines containing `───` (Claude's section dividers).
-
-These four navigation scripts operate on whatever editable text control is currently focused — typically the Notepad opened by PlainView, but they'll work in any editor that exposes a TextInfo (VS Code, Word, etc.).
-
-Announce in place (no caret move):
-
-- **Speak the currently selected CC or Codex option** — when Claude Code or Codex shows a multiple-choice prompt, finds the most recent line in the focused terminal whose first non-whitespace character is the selection chevron (`❯` in Claude Code, `›` in Codex) and speaks the option text after it. Says "No selected option found" if no such line is present.
+Navigation gestures work in the focused editable text control, not only in the
+editor opened by PlainView. If no target is found, PlainView announces that
+there are no more matches or that no attention point/selected option was found.
 
 ## Installation
 
-Grab a release `.nvda-addon` from this repo's releases (or build one — see below), then either double-click it or install via NVDA → Tools → Add-on Store → Install from external file. Restart NVDA. Min NVDA version: **2026.1**.
+Navigate the to `releases` directory, download a release `.nvda-addon`, open it, and restart NVDA.
+Minimum NVDA version: **2026.1**.
 
 ## Build from source
 
 Requires [`uv`](https://docs.astral.sh/uv/):
 
-```
+```console
 uv run scons
 ```
 
-The built package lands at `PlainView-<version>.nvda-addon` at the repo root.
+The package is written to the repo root as `PlainView-<version>.nvda-addon`.
 
-## Implementation notes
+## Notes
 
-A few things worth knowing if you read the code or hit unexpected behaviour:
-
-- **The temp file at `%TEMP%\plainview.txt` is reused, not unique-per-invocation.** Each gesture overwrites it. The path is in your user's temp directory, readable by anything running as your user account. If you dump output that contains secrets, treat the file the same way you'd treat the terminal scrollback itself.
-- **Fallback to the clipboard.** If NVDA's TextInfo path can't read the focused control (rare for terminals; possible for some non-terminal windows), the add-on falls back to reading the clipboard. If you fire the gesture from a window that NVDA can't read, whatever is currently on your clipboard gets dumped into `plainview.txt`. Be aware of this if you have a password manager primed.
-- **Notepad detection is by window title** (matching `… - Notepad`), so the script works equally well for classic Notepad and the Win11 tabbed Notepad — including the case where opening the file just activates an existing tab inside the running Notepad singleton.
-- **Caret movement is asynchronous.** After foregrounding Notepad, the add-on polls NVDA's focus state on the wx event loop until focus settles inside the Notepad edit control, then issues a TextInfo paragraph move. This avoids blocking NVDA's main thread during cross-app focus propagation.
+- `plainview.txt` is reused on each capture. Treat it like terminal scrollback
+  if it contains secrets.
+- If NVDA cannot read the focused control, PlainView may fall back to clipboard
+  text.
+- Editor windows are detected by title, so existing Notepad tabs and Notepad++
+  windows are reused when Windows does that naturally.
 
 ## License
 
-GPL v2 (see `COPYING.txt`). Any redistribution must include source.
+GPL v2. See `COPYING.txt`.
 
 ## Credits
 
-- Built on top of the official [NVDA AddonTemplate](https://github.com/nvaccess/addonTemplate). The `sconstruct`, `site_scons/`, manifest templates, and related build infrastructure come from that template — copyright (C) 2012–2025 Rui Batista, Noelia Martinez, Joseph Lee, and the NVDA Add-on team contributors.
-- The GitHub Actions release workflow was contributed to the AddonTemplate by [alekssamos](https://github.com/alekssamos/) — copyright (C) 2022 alekssamos.
-- The add-on's design was initially inspired by mltony's GPL v2 NVDA add-ons (`nvda-task-switcher`, `nvda-indent-nav`); the GPL v2 license was retained from that lineage. No code is copied from those repositories in the current source.
+Built on the official [NVDA AddonTemplate](https://github.com/nvaccess/addonTemplate).
+The task switching capability (bringing apps to foreground using Windows handlers) was initially inspired by mltony's open-sourced Task Switcher NVDA addon.
